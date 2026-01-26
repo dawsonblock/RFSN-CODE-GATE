@@ -87,7 +87,68 @@ from .llm_integration import (
     LLMPatchGenerator,
 )
 
+from .llm_adapter import (
+    create_llm_caller,
+    get_default_router,
+    LLMAdapterConfig,
+    LLMRouter,
+    validate_api_keys,
+)
+
+from .docker_sandbox import (
+    check_docker_available,
+    create_executor_sandbox,
+    DockerSandbox,
+    DockerSandboxConfig,
+    SandboxManager,
+)
+
+from .cgw_metrics import (
+    CGWMetricsCollector,
+    get_metrics_collector,
+    start_dashboard_server,
+)
+
+from .cgw_bandit import (
+    BanditBoostMixin,
+    CGWBandit,
+    CGWBanditConfig,
+    get_cgw_bandit,
+    record_action_outcome,
+)
+
+from .event_store import (
+    CGWEventStore,
+    EventStoreConfig,
+    EventStoreSubscriber,
+    get_event_store,
+    StoredEvent,
+)
+
+from .streaming_llm import (
+    create_streaming_caller,
+    StreamingConfig,
+    StreamingLLMClient,
+    StreamingMetrics,
+    SyncStreamingWrapper,
+)
+
+from .action_memory import (
+    CGWActionMemory,
+    CGWMemoryConfig,
+    get_action_memory,
+    MemoryExecutorMixin,
+)
+
+from .websocket_dashboard import (
+    CGWDashboardServer,
+    DashboardConfig,
+    DashboardEventSubscriber,
+    get_dashboard,
+)
+
 __all__ = [
+
     # Action types
     "ActionCategory",
     "ActionPayload",
@@ -126,4 +187,56 @@ __all__ = [
     "LLMConfig",
     "LLMDecisionAdvisor",
     "LLMPatchGenerator",
+    
+    # LLM Adapter (real API integration)
+    "create_llm_caller",
+    "get_default_router",
+    "LLMAdapterConfig",
+    "LLMRouter",
+    "validate_api_keys",
+    
+    # Docker Sandbox
+    "check_docker_available",
+    "create_executor_sandbox",
+    "DockerSandbox",
+    "DockerSandboxConfig",
+    "SandboxManager",
+    
+    # Metrics
+    "CGWMetricsCollector",
+    "get_metrics_collector",
+    "start_dashboard_server",
+    
+    # Strategy Bandit (Phase 2)
+    "BanditBoostMixin",
+    "CGWBandit",
+    "CGWBanditConfig",
+    "get_cgw_bandit",
+    "record_action_outcome",
+    
+    # Event Store (Phase 2)
+    "CGWEventStore",
+    "EventStoreConfig",
+    "EventStoreSubscriber",
+    "get_event_store",
+    "StoredEvent",
+    
+    # Streaming LLM (Phase 2)
+    "create_streaming_caller",
+    "StreamingConfig",
+    "StreamingLLMClient",
+    "StreamingMetrics",
+    "SyncStreamingWrapper",
+    
+    # Action Memory (Phase 2)
+    "CGWActionMemory",
+    "CGWMemoryConfig",
+    "get_action_memory",
+    "MemoryExecutorMixin",
+    
+    # WebSocket Dashboard (Phase 2)
+    "CGWDashboardServer",
+    "DashboardConfig",
+    "DashboardEventSubscriber",
+    "get_dashboard",
 ]
