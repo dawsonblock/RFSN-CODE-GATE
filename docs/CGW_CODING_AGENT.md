@@ -17,70 +17,179 @@ This is a control system, not a chatbot.
 
 ## Quick Start
 
-```python
-from cgw_ssl_guard.coding_agent import CodingAgentRuntime, AgentConfig
+### CLI Usage
 
-# Configure the agent
-config = AgentConfig(
-    goal="Fix failing tests",
-    max_cycles=50,
-    max_patches=10,
-)
+```bash
+# Run with goal
+python -m cgw_ssl_guard.coding_agent.cli --goal "Fix failing tests"
 
-# Create and run
-runtime = CodingAgentRuntime(config=config)
-result = runtime.run_until_done()
+# Run with config file
+python -m cgw_ssl_guard.coding_agent.cli --config cgw.yaml
 
-print(result.summary())
-# [SUCCESS] FINALIZE after 5 cycles (234.5ms). Tests passing: True.
+# Run with dashboard
+python -m cgw_ssl_guard.coding_agent.cli --goal "Fix tests" --dashboard
+
+# Generate default config
+python -m cgw_ssl_guard.coding_agent.cli --init-config > cgw.yaml
 ```
+
+### Python API
+
+```python
+from cgw_ssl_guard.coding_agent import IntegratedCGWAgent
+
+# Simple usage
+agent = IntegratedCGWAgent(goal="Fix failing tests")
+result = agent.run()
+print(result.summary())
+
+# With config file
+agent = IntegratedCGWAgent.from_config("cgw.yaml")
+result = agent.run()
+```
+
+---
+
+## Configuration
+
+### Config File (cgw.yaml)
+
+```yaml
+agent:
+  max_cycles: 100
+  max_patches: 10
+  goal: "Fix failing tests"
+
+llm:
+  provider: deepseek
+  model: deepseek-coder
+  temperature: 0.2
+
+sandbox:
+  image: "python:3.11-slim"
+  timeout: 300
+
+bandit:
+  enabled: true
+  exploration_bonus: 0.1
+
+memory:
+  enabled: true
+  regression_threshold: 0.2
+
+dashboard:
+  enabled: true
+  http_port: 8765
+```
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `CGW_LLM_PROVIDER` | LLM provider (deepseek/openai/gemini) |
+| `CGW_MAX_CYCLES` | Maximum decision cycles |
+| `CGW_GOAL` | Agent goal |
+| `CGW_DASHBOARD_PORT` | Dashboard HTTP port |
 
 ---
 
 ## Architecture
 
 ```
-Decision Layer (CGW + Gate)
-│
-├── Proposal Generators → Candidates
-│   ├── SafetyProposalGenerator (ABORT on trigger)
-│   ├── PlannerProposalGenerator (next step from goal)
-│   └── IdleProposalGenerator (fallback)
-│
-├── Thalamic Gate → Single Winner
-│   └── Forced queue checked first
-│
-├── CGW Runtime → Atomic Commit
-│   └── One slot, atomic swap
-│
-└── Blocking Executor → Action Execution
-    └── Returns results for next cycle
+┌─────────────────────────────────────────────────────────────┐
+│                    CGW Coding Agent                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │   Bandit    │    │   Memory    │    │  Dashboard  │     │
+│  │  (Strategy) │    │ (Outcomes)  │    │ (WebSocket) │     │
+│  └──────┬──────┘    └──────┬──────┘    └──────┬──────┘     │
+│         │                  │                  │             │
+│         └──────────────────┼──────────────────┘             │
+│                            ▼                                │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │              Integrated Runtime                      │   │
+│  │  ┌─────────────────────────────────────────────┐    │   │
+│  │  │            Coding Agent Runtime             │    │   │
+│  │  │  ┌────────┐  ┌────────┐  ┌────────────┐    │    │   │
+│  │  │  │ Propo- │→ │Thalamic│→ │    CGW     │    │    │   │
+│  │  │  │  sals  │  │  Gate  │  │  Runtime   │    │    │   │
+│  │  │  └────────┘  └────────┘  └─────┬──────┘    │    │   │
+│  │  │                                │           │    │   │
+│  │  │                          ┌─────▼──────┐    │    │   │
+│  │  │                          │  Executor  │    │    │   │
+│  │  │                          │ (Blocking) │    │    │   │
+│  │  │                          └────────────┘    │    │   │
+│  │  └─────────────────────────────────────────────┘    │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                            │                                │
+│                      ┌─────▼─────┐                          │
+│                      │Event Store│                          │
+│                      │ (SQLite)  │                          │
+│                      └───────────┘                          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## One Full Cycle
+## Phase 2 Features
 
+### Strategy Bandit
+
+Adaptive action selection using UCB/Thompson Sampling:
+
+```python
+from cgw_ssl_guard.coding_agent import get_cgw_bandit, record_action_outcome
+
+bandit = get_cgw_bandit()
+boost = bandit.get_saliency_boost("RUN_TESTS")  # 0.8-1.5x
+record_action_outcome("RUN_TESTS", success=True)
 ```
-1. COLLECT PROPOSALS
-   Each generator analyzes context and submits Candidates
 
-2. GATE SELECTION
-   Gate scores candidates (saliency + urgency + surprise)
-   Forced signals bypass competition
+### Action Memory
 
-3. CGW COMMIT
-   Winner committed atomically to workspace
-   Event emitted: CGW_COMMIT
+Similarity-based proposal boosting with regression firewall:
 
-4. EXECUTE (BLOCKING)
-   Executor runs action synchronously
-   No other action can run until complete
+```python
+from cgw_ssl_guard.coding_agent import get_action_memory
 
-5. UPDATE CONTEXT
-   Results update proposal context
+memory = get_action_memory()
+if memory.is_blocked("APPLY_PATCH", patch_hash):
+    skip_action()  # Regression firewall blocks known-bad patterns
+```
 
-6. → NEXT CYCLE
+### Event Store
+
+Persistent SQLite event logging:
+
+```python
+from cgw_ssl_guard.coding_agent import get_event_store
+
+store = get_event_store()
+store.start_session("session_123", goal="Fix tests")
+store.export_session_json("session_123", "events.json")
+```
+
+### WebSocket Dashboard
+
+Real-time monitoring with token cost tracking:
+
+```python
+from cgw_ssl_guard.coding_agent import get_dashboard
+
+dashboard = get_dashboard()  # http://localhost:8765
+dashboard.emit_event({"event_type": "CGW_COMMIT", "cycle_id": 1})
+```
+
+### Streaming LLM
+
+Token-by-token generation with safety detection:
+
+```python
+from cgw_ssl_guard.coding_agent import SyncStreamingWrapper
+
+for chunk in SyncStreamingWrapper().stream("Generate code"):
+    print(chunk, end="")
 ```
 
 ---
@@ -99,62 +208,31 @@ Decision Layer (CGW + Gate)
 
 ---
 
-## Forced Signal Override
+## One Full Cycle
 
-Safety-critical signals bypass competition:
-
-```python
-# Inject abort that wins regardless of other candidates
-runtime.inject_forced_signal(CodingAction.ABORT, "max_patches_exceeded")
 ```
+1. COLLECT PROPOSALS
+   Each generator analyzes context and submits Candidates
+   Bandit provides saliency boosts
 
-This is the "non-gameable override" for safety conditions.
+2. GATE SELECTION
+   Gate scores candidates (saliency + urgency + surprise)
+   Memory blocks regression-prone actions
+   Forced signals bypass competition
 
----
+3. CGW COMMIT
+   Winner committed atomically to workspace
+   Event emitted to store + dashboard
 
-## Seriality Verification
+4. EXECUTE (BLOCKING)
+   Executor runs action synchronously
+   No other action can run until complete
 
-```python
-# After running, verify the invariant was maintained
-assert runtime.verify_seriality()  # True if no cycle had >1 commit
-```
+5. UPDATE CONTEXT
+   Results update proposal context
+   Outcomes recorded to memory + bandit
 
-The `SerialityMonitor` tracks commits per cycle and can detect violations.
-
----
-
-## Integration with RFSN Controller
-
-Use the CGW bridge to integrate with existing controller:
-
-```python
-from rfsn_controller.cgw_bridge import CGWControllerBridge, BridgeConfig
-
-config = BridgeConfig(
-    github_url="https://github.com/user/repo",
-    test_cmd="pytest -q",
-)
-
-bridge = CGWControllerBridge(config, sandbox=sandbox)
-result = bridge.run()
-
-print(result["cycles_executed"])
-print(result["seriality_maintained"])
-```
-
----
-
-## Event Log for Replay
-
-All decisions emit events for deterministic replay:
-
-```python
-event_log = bridge.get_event_log()
-# [
-#   {"event": "GATE_SELECTION", "payload": {...}},
-#   {"event": "CGW_COMMIT", "payload": {...}},
-#   ...
-# ]
+6. → NEXT CYCLE
 ```
 
 ---
@@ -162,6 +240,33 @@ event_log = bridge.get_event_log()
 ## Testing
 
 ```bash
-pytest tests/test_cgw_coding_agent.py -v
-# 22 tests covering seriality, forced signals, execution, events, workflow
+# All tests
+pytest tests/cgw/ -v
+
+# E2E tests (18)
+pytest tests/cgw/test_e2e.py -v
+
+# Phase 2 tests (37)
+pytest tests/cgw/test_phase2.py -v
+
+# Total: 55 tests
 ```
+
+---
+
+## Module Reference
+
+| Module | Purpose |
+|--------|---------|
+| `coding_agent_runtime.py` | Core serial decision loop |
+| `integrated_runtime.py` | Full-featured runtime with all integrations |
+| `config.py` | YAML/JSON configuration |
+| `cli.py` | Command-line interface |
+| `cgw_bandit.py` | Strategy learning |
+| `action_memory.py` | Outcome memory + regression firewall |
+| `event_store.py` | SQLite event persistence |
+| `streaming_llm.py` | Async LLM streaming |
+| `websocket_dashboard.py` | Real-time dashboard |
+| `llm_adapter.py` | Multi-provider LLM client |
+| `docker_sandbox.py` | Container execution |
+| `cgw_metrics.py` | Prometheus metrics |

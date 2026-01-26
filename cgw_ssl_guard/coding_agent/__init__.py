@@ -147,7 +147,19 @@ from .websocket_dashboard import (
     get_dashboard,
 )
 
+from .config import (
+    CGWConfig,
+    load_config,
+    create_default_config,
+)
+
+from .integrated_runtime import (
+    IntegratedCGWAgent,
+    run_agent,
+)
+
 __all__ = [
+
 
     # Action types
     "ActionCategory",
@@ -239,4 +251,13 @@ __all__ = [
     "DashboardConfig",
     "DashboardEventSubscriber",
     "get_dashboard",
+    
+    # Configuration (Phase 3)
+    "CGWConfig",
+    "load_config",
+    "create_default_config",
+    
+    # Integrated Runtime (Phase 3)
+    "IntegratedCGWAgent",
+    "run_agent",
 ]

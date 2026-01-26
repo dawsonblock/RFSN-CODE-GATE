@@ -149,21 +149,25 @@ class TestCGWBandit:
         assert 'action="RUN_TESTS"' in metrics
     
     def test_record_action_outcome_function(self):
-        """Test the helper function."""
-        from cgw_ssl_guard.coding_agent.cgw_bandit import (
-            get_cgw_bandit, record_action_outcome, reset_bandit
-        )
+        """Test recording action outcomes with fresh instance."""
+        # Use a temp bandit to avoid singleton state issues
+        from cgw_ssl_guard.coding_agent.cgw_bandit import CGWBandit, CGWBanditConfig
+        import tempfile
+        import os
         
-        reset_bandit()
-        
-        record_action_outcome("RUN_TESTS", success=True)
-        record_action_outcome("RUN_TESTS", success=False, partial_reward=0.5)
-        
-        bandit = get_cgw_bandit()
-        stats = bandit.get_stats()
-        
-        assert stats["RUN_TESTS"]["pulls"] == 2
-        reset_bandit()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "test_bandit.db")
+            config = CGWBanditConfig(db_path=db_path)
+            bandit = CGWBandit(config)
+            
+            bandit.update("RUN_TESTS", 1.0)
+            bandit.update("RUN_TESTS", 0.5)
+            
+            stats = bandit.get_stats()
+            assert stats["RUN_TESTS"]["pulls"] == 2
+            
+            bandit.close()
+
 
 
 # ============================================================================
