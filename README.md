@@ -2,14 +2,15 @@
 
 # 🚀 RFSN Controller
 
-**Autonomous Code Repair Agent with Serial Decision Architecture**
+**Autonomous Code Repair Agent with Hierarchical Planning & Serial Decision Architecture**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen.svg)](#testing)
 [![CGW Architecture](https://img.shields.io/badge/CGW-Serial%20Decisions-purple.svg)](#cgw-mode)
+[![Phase 4](https://img.shields.io/badge/Phase%204-Complete-green.svg)](#hierarchical-planner)
 
-*Fix bugs autonomously. One decision at a time.*
+*Fix bugs autonomously. One decision at a time. Safety guaranteed.*
 
 </div>
 
@@ -33,6 +34,32 @@ One decision per cycle. No parallel chaos.
 </td>
 <td width="50%">
 
+### 🛡️ Plan Gate (Hard Safety)
+
+Planner proposes, Gate authorizes.
+
+- **Step type allowlist** enforcement
+- **Shell injection detection**
+- **Path validation** (workspace-only)
+- **Budget enforcement** (max steps)
+
+</td>
+</tr>
+<tr>
+<td width="50%">
+
+### 📋 Hierarchical Planner v4
+
+High-level goal decomposition with learning.
+
+- **Failure fingerprinting** (categorization)
+- **Thompson Sampling** strategy selection
+- **Quarantine lane** (anti-regression)
+- **Proposal-space learning** only
+
+</td>
+<td width="50%">
+
 ### ⚡ Multi-Model Ensemble
 
 Active-active LLM failover.
@@ -44,33 +71,43 @@ Active-active LLM failover.
 
 </td>
 </tr>
-<tr>
-<td width="50%">
-
-### 📋 Planner v3.0
-
-High-level goal decomposition.
-
-- Failure classification
-- Model arbitration learning
-- Safety guardrails
-- LLM-powered breakdown
-
-</td>
-<td width="50%">
-
-### ⚖️ Adversarial QA
-
-Every patch is guilty until proven innocent.
-
-- Claim-based verification
-- Evidence collection
-- Accept/Reject/Escalate gates
-- Regression firewall
-
-</td>
-</tr>
 </table>
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        RFSN Controller                               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────────────┐    │
+│   │   Planner   │───▶│  Plan Gate  │───▶│   Controller Loop   │    │
+│   │ (proposes)  │    │ (validates) │    │     (executes)      │    │
+│   └─────────────┘    └─────────────┘    └─────────────────────┘    │
+│         ▲                                         │                  │
+│         │                                         ▼                  │
+│   ┌─────────────────────────────────────────────────────────────┐  │
+│   │                     Learning Layer                           │  │
+│   │  ┌────────────┐  ┌────────────┐  ┌────────────────────┐    │  │
+│   │  │ Fingerprint│  │   Bandit   │  │    Quarantine      │    │  │
+│   │  │ (classify) │  │  (select)  │  │ (anti-regression)  │    │  │
+│   │  └────────────┘  └────────────┘  └────────────────────┘    │  │
+│   └─────────────────────────────────────────────────────────────┘  │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Safety Guarantees
+
+| Guarantee | Implementation |
+|-----------|----------------|
+| **Planner never executes** | Produces JSON data only |
+| **Gate has veto power** | Cannot be bypassed |
+| **Learning cannot weaken gates** | Proposal space only |
+| **Serial execution** | One mutation at a time |
+| **No regressions** | Quarantine auto-blocks |
 
 ---
 
@@ -84,14 +121,64 @@ pip install -e .
 export DEEPSEEK_API_KEY="sk-..."
 export GEMINI_API_KEY="..."
 
-# Run (classic mode)
-python -m rfsn_controller.cli --repo https://github.com/user/repo --test "pytest -q"
-
 # Run (CGW serial decision mode)
 python -m rfsn_controller.cli --repo https://github.com/user/repo --cgw-mode
 
-# Run (dedicated CGW CLI with event logging)
-python -m rfsn_controller.cgw_cli --repo https://github.com/user/repo --save-events ./events.json
+# Run with hierarchical planner
+python -m rfsn_controller.cli --repo https://github.com/user/repo --planner-mode v4
+```
+
+---
+
+## 🛡️ Hierarchical Planner
+
+The Phase 4 hierarchical planner adds safe learning to the controller:
+
+```python
+from rfsn_controller.gates import PlanGate, PlanGateConfig
+from rfsn_controller.learning import LearnedStrategySelector
+from rfsn_controller.controller_loop import ControllerLoop
+
+# Setup with safety config
+config = PlanGateConfig(max_steps=10)
+gate = PlanGate(config)
+selector = LearnedStrategySelector()
+loop = ControllerLoop(gate=gate, learning=selector)
+
+# Get AI recommendation based on failure patterns
+rec = selector.recommend(failing_tests=["test_auth_flow"])
+print(f"Strategy: {rec.strategy}, Confidence: {rec.confidence:.0%}")
+
+# Run plan (gate validates every step)
+plan = {
+    "plan_id": "fix_auth",
+    "steps": [
+        {"id": "s1", "type": "read_file", "inputs": {"file": "auth.py"}, "expected_outcome": "understand"},
+        {"id": "s2", "type": "apply_patch", "inputs": {...}, "expected_outcome": "fix"},
+        {"id": "s3", "type": "run_tests", "inputs": {}, "expected_outcome": "pass"},
+    ]
+}
+
+result = loop.run_plan(plan)
+print(f"Success: {result.success}, Steps: {result.steps_succeeded}/{result.steps_executed}")
+
+# Update learning (anti-regression)
+selector.update(rec, success=result.success)
+```
+
+### Allowed Step Types
+
+```python
+DEFAULT_ALLOWED_STEP_TYPES = {
+    # Read-only
+    "search_repo", "read_file", "analyze_file", "list_directory", "grep_search",
+    # Code modification (sandboxed)
+    "apply_patch", "add_test", "refactor_small", "fix_import", "fix_typing",
+    # Verification
+    "run_tests", "run_lint", "check_syntax", "validate_types",
+    # Coordination
+    "wait", "checkpoint", "replan",
+}
 ```
 
 ---
@@ -114,27 +201,71 @@ print(result.summary())
 # [SUCCESS] FINALIZE after 5 cycles. Tests passing: True.
 ```
 
-### Key Invariants
+---
 
-| Invariant | Enforcement |
-|-----------|-------------|
-| One decision/cycle | `SerialityMonitor` |
-| Forced signals win | `inject_forced_signal()` |
-| No tool overlap | `BlockingExecutor` |
-| Replay support | Event emission |
+## 📁 Project Structure
 
-### Replay Sessions
+```
+├── cgw_ssl_guard/           # CGW/SSL Guard Core
+│   ├── coding_agent/        # Serial Decision Coding Agent
+│   │   ├── action_types.py
+│   │   ├── proposal_generators.py
+│   │   ├── executor.py
+│   │   ├── coding_agent_runtime.py
+│   │   ├── config.py            # YAML/JSON configuration
+│   │   ├── cli.py               # CLI entry point
+│   │   └── integrated_runtime.py
+│   ├── thalamic_gate.py
+│   ├── event_bus.py
+│   └── monitors.py
+│
+├── rfsn_controller/         # Main Controller
+│   ├── controller.py        # 2600+ line repair loop
+│   ├── controller_loop.py   # NEW: Serial execution with planner
+│   ├── gates/               # NEW: Safety gates
+│   │   ├── __init__.py
+│   │   └── plan_gate.py     # Hard safety enforcement
+│   ├── learning/            # NEW: Proposal-space learning
+│   │   ├── fingerprint.py   # Failure categorization
+│   │   ├── strategy_bandit.py
+│   │   ├── quarantine.py
+│   │   └── learned_strategy_selector.py
+│   ├── planner_v2/          # Planner system
+│   ├── qa/                   # QA/verification
+│   ├── buildpacks/          # Language support
+│   └── cgw_bridge.py        # CGW integration
+│
+├── tests/                   # Test Suite (102 tests)
+│   ├── cgw/                 # CGW tests (18)
+│   ├── test_phase2.py       # Phase 2 tests (37)
+│   ├── rfsn_controller/
+│   │   └── test_phase4.py   # Phase 4 tests (25)
+│   └── ...
+│
+└── docs/                    # Documentation
+```
 
-```python
-from cgw_ssl_guard.coding_agent import EventReplayEngine
+---
 
-engine = EventReplayEngine.from_json("events.json")
-analysis = engine.analyze()
+## 🧪 Testing
 
-print(analysis.summary())
-# Session Analysis: SUCCESS
-#   Cycles: 5
-#   Seriality: OK
+```bash
+# Run all tests
+pytest tests/ -v
+
+# Run Phase 4 tests (hierarchical planner)
+pytest tests/rfsn_controller/test_phase4.py -v
+
+# Run CGW tests
+pytest tests/cgw/ -v
+
+# Quick validation
+python -c "
+from rfsn_controller.gates import PlanGate
+from rfsn_controller.learning import LearnedStrategySelector
+from rfsn_controller.controller_loop import ControllerLoop
+print('✓ Phase 4 imports successful')
+"
 ```
 
 ---
@@ -149,54 +280,6 @@ print(analysis.summary())
 | **Rust** | `rust_pack` | cargo |
 | **C/C++** | `cpp_pack` | gcc, cmake, make |
 | **Java** | `java_pack` | maven, gradle |
-
----
-
-## 📁 Project Structure
-
-```
-├── cgw_ssl_guard/           # CGW/SSL Guard Core
-│   ├── coding_agent/        # Serial Decision Coding Agent
-│   │   ├── action_types.py
-│   │   ├── proposal_generators.py
-│   │   ├── executor.py
-│   │   ├── coding_agent_runtime.py
-│   │   ├── replay.py
-│   │   └── llm_integration.py
-│   ├── thalamic_gate.py
-│   ├── event_bus.py
-│   └── monitors.py
-│
-├── rfsn_controller/         # Main Controller
-│   ├── controller.py        # 2600+ line repair loop
-│   ├── planner_v2/          # Planner system
-│   ├── qa/                   # QA/verification
-│   ├── buildpacks/          # Language support
-│   ├── cli.py               # Main CLI
-│   ├── cgw_cli.py           # CGW CLI
-│   └── cgw_bridge.py        # CGW integration
-│
-├── tests/                   # Test Suite
-│   ├── cgw/                 # CGW tests
-│   └── ...
-│
-└── docs/                    # Documentation
-```
-
----
-
-## 🧪 Testing
-
-```bash
-# Run CGW tests
-pytest tests/cgw/ -v
-
-# Run all tests
-pytest tests/ -v
-
-# Quick validation
-python -c "from cgw_ssl_guard.coding_agent import CodingAgentRuntime; print('✓')"
-```
 
 ---
 
@@ -221,16 +304,18 @@ python -c "from cgw_ssl_guard.coding_agent import CodingAgentRuntime; print('✓
 --cgw-mode
 --max-cgw-cycles 50
 
-# Parallel patches
---parallel-patches
---ensemble-mode
+# Planner (v4 includes learning)
+--planner-mode v4
+--max-plan-steps 12
 
 # Learning
 --learning-db ./learning.db
 --policy-mode bandit
+--quarantine-threshold 0.3
 
-# Planner
---planner-mode v2
+# Parallel patches
+--parallel-patches
+--ensemble-mode
 ```
 
 ---
@@ -239,6 +324,8 @@ python -c "from cgw_ssl_guard.coding_agent import CodingAgentRuntime; print('✓
 
 - All code runs in isolated Docker containers
 - No host execution by default
+- **PlanGate** validates every step before execution
+- **Shell injection detection** blocks dangerous commands
 - APT package whitelisting
 - Command allowlisting
 - Patch size limits
@@ -256,5 +343,7 @@ MIT License. See [LICENSE](LICENSE).
 <div align="center">
 
 **Built for autonomous code repair at scale.**
+
+*Planner proposes. Gate authorizes. Controller executes.*
 
 </div>
