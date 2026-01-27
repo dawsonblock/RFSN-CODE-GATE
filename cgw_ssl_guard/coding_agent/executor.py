@@ -211,9 +211,9 @@ class BlockingExecutor:
                 action=payload.action,
                 success=bool(r.ok),
                 output=r.stdout,
-                error=r.stderr if not r.ok else None,
-                tests_ran=True,
-            )
+                        error=r.stderr if not r.ok else None,
+                        duration_ms=r.elapsed_ms,
+                    )
         
         # Fallback to sandbox execution if spine is not available
         test_cmd = payload.parameters.get("test_cmd", self.config.default_test_cmd)
