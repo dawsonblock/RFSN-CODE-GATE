@@ -179,22 +179,44 @@ class BlockingExecutor:
         """Get or create a governed executor bound to the current work dir.
         
         This guarantees the same allowlists + hygiene are enforced.
-        Returns None if GovernedExecutor is not available.
+        Returns None if GovernedExecutor is not available or not enabled.
+        
+        IMPORTANT:
+        - If a spine has been explicitly injected (e.g., by CGWControllerBridge),
+          it is always returned.
+        - Auto-creation is only performed when explicitly enabled via config,
+          so the default behavior continues to respect the sandbox.
         """
+        # If the GovernedExecutor class is not available, we can only ever return
+        # an already-injected spine (if any).
         if GovernedExecutor is None:
+            return getattr(self, "_governed_exec", None)
+
+        # Prefer an explicitly injected spine if present.
+        if hasattr(self, "_governed_exec") and self._governed_exec is not None:
+            return self._governed_exec
+
+        # By default, do NOT auto-create a governed executor when a sandbox is present,
+        # unless the config explicitly allows governed execution alongside the sandbox.
+        allow_with_sandbox = getattr(self.config, "allow_governed_with_sandbox", False)
+        if self.sandbox is not None and not allow_with_sandbox:
             return None
-            
-        if not hasattr(self, "_governed_exec") or self._governed_exec is None:
-            work_dir = self.config.work_dir
-            if work_dir is None:
-                # fallback to CWD if not configured
-                work_dir = Path(".").resolve()
-            self._governed_exec = GovernedExecutor(
-                        repo_dir=str(work_dir),
-                        allowed_commands=None,
-                        verify_argv=self.config.default_test_cmd.split(),
-                        timeout_sec=self.config.timeout_sec,
-            )
+
+        # Only auto-create a governed executor when explicitly enabled via config.
+        auto_governed = getattr(self.config, "auto_governed_executor", False)
+        if not auto_governed:
+            return None
+
+        work_dir = self.config.work_dir
+        if work_dir is None:
+            # fallback to CWD if not configured
+            work_dir = Path(".").resolve()
+        self._governed_exec = GovernedExecutor(
+            repo_dir=str(work_dir),
+            allowed_commands=None,  # let global allowlist enforce; set per-profile if you have it
+            verify_argv=["pytest", "-q"],  # override via config if desired
+            timeout_sec=self.config.timeout_sec,
+        )
         return self._governed_exec
     
     # --- Action Handlers ---
