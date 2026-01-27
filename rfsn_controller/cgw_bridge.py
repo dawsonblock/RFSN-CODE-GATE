@@ -5,6 +5,8 @@ the CGW serial decision architecture. It wraps the controller's
 components as proposal generators and routes all decisions through
 the thalamic gate.
 
+ALL EXECUTION goes through GovernedExecutor (single spine).
+
 Usage:
     from rfsn_controller.cgw_bridge import CGWControllerBridge
     from rfsn_controller.controller import ControllerConfig
@@ -39,6 +41,8 @@ from cgw_ssl_guard.coding_agent import (
     SafetyProposalGenerator,
 )
 from cgw_ssl_guard.types import Candidate
+
+from .executor_spine import GovernedExecutor
 
 if TYPE_CHECKING:
     from .controller import ControllerConfig
@@ -204,14 +208,30 @@ class CGWControllerBridge:
         self.gate = ThalamusGate(self.event_bus)
         self.cgw = CGWRuntime(self.event_bus)
         
-        # Create executor with sandbox
+        # Create governed executor (single spine)
+        # Determine repo directory from config or sandbox
+        repo_dir = self.config.github_url if self.config.github_url else str(Path.cwd())
+        if sandbox and hasattr(sandbox, "repo_dir"):
+            repo_dir = sandbox.repo_dir
+        
+        governed = GovernedExecutor(
+            repo_dir=repo_dir,
+            allowed_commands=None,  # let global allowlist enforce
+            verify_argv=self.config.test_cmd.split() if self.config.test_cmd else ["pytest", "-q"],
+            timeout_sec=180,
+        )
+        
+        # Create executor with sandbox and inject governed spine
         executor_config = ExecutorConfig(
             default_test_cmd=self.config.test_cmd,
+            work_dir=Path(repo_dir) if isinstance(repo_dir, str) else repo_dir,
         )
         self.executor = BlockingExecutor(
-            sandbox=sandbox,
+            sandbox=None,  # don't let CGW sandbox execute patches directly
             config=executor_config,
         )
+        # Inject the governed executor
+        self.executor._governed_exec = governed
         
         # Create generators
         self.generators = self._create_generators()

@@ -36,7 +36,7 @@ jobs:
           mkdir -p artifacts
           GOAL="${{ github.event.inputs.goal }}"
           VERIFY="${{ github.event.inputs.verify }}"
-          rfsn --profile ci_safe --repo "$PWD" --goal "$GOAL" --verify "$VERIFY" || true
+          rfsn --profile ci_safe --repo "$PWD" --goal "$GOAL" --verify "$VERIFY"
 
       - name: Summary
         run: |
@@ -54,4 +54,8 @@ jobs:
           body-path: artifacts/RFSN_SUMMARY.md
           commit-message: "RFSN: ${{ github.event.inputs.goal }}"
           add-paths: |
-            .
+            rfsn_controller/**
+            cgw_ssl_guard/**
+            tests/**
+            pyproject.toml
+            requirements*.txt

@@ -47,6 +47,7 @@ Thumbs.db
 results/
 logs/
 .rfsn_cache/
+artifacts/
 
 # Testing/Linting Cache
 .pytest_cache/

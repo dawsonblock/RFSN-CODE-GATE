@@ -12,6 +12,7 @@ CRITICAL INVARIANTS:
 - It only reports results back
 - Execution must complete before the next decision cycle
 - No tool overlap - one action at a time
+- ALL real execution is delegated to GovernedExecutor (single spine)
 """
 
 from __future__ import annotations
@@ -28,6 +29,13 @@ from .action_types import (
     CodingAction,
     ExecutionResult,
 )
+
+# Import the unified execution spine
+try:
+    from rfsn_controller.executor_spine import GovernedExecutor
+except ImportError:
+    # Fallback for environments where rfsn_controller isn't available
+    GovernedExecutor = None
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +66,7 @@ class ExecutorConfig:
     
     # Timeouts (in seconds)
     test_timeout: int = 300
+    timeout_sec: int = 180  # Default timeout for governed executor
     build_timeout: int = 600
     lint_timeout: int = 120
     patch_timeout: int = 30
@@ -166,10 +175,47 @@ class BlockingExecutor:
         """Get the total number of executions."""
         return self._execution_count
     
+    def _spine(self) -> Optional[Any]:
+        """Get or create a governed executor bound to the current work dir.
+        
+        This guarantees the same allowlists + hygiene are enforced.
+        Returns None if GovernedExecutor is not available.
+        """
+        if GovernedExecutor is None:
+            return None
+            
+        if not hasattr(self, "_governed_exec") or self._governed_exec is None:
+            work_dir = self.config.work_dir
+            if work_dir is None:
+                # fallback to CWD if not configured
+                work_dir = Path(".").resolve()
+            self._governed_exec = GovernedExecutor(
+                repo_dir=str(work_dir),
+                allowed_commands=None,  # let global allowlist enforce; set per-profile if you have it
+                verify_argv=["pytest", "-q"],  # override via config if desired
+                timeout_sec=self.config.timeout_sec,
+            )
+        return self._governed_exec
+    
     # --- Action Handlers ---
     
     def _execute_run_tests(self, payload: ActionPayload) -> ExecutionResult:
         """Run the test suite."""
+        spine = self._spine()
+        if spine is not None:
+            # Delegate to governed executor
+            argv = payload.parameters.get("argv") or ["pytest", "-q"]
+            step = {"id": f"cgw:{payload.action.value}", "type": "run_tests", "argv": argv}
+            r = spine.execute_step(step)
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(r.ok),
+                output=r.stdout,
+                error=r.stderr if not r.ok else None,
+                tests_ran=True,
+            )
+        
+        # Fallback to sandbox execution if spine is not available
         test_cmd = payload.parameters.get("test_cmd", self.config.default_test_cmd)
         
         if self.sandbox is None:
@@ -206,6 +252,27 @@ class BlockingExecutor:
     
     def _execute_run_focused_tests(self, payload: ActionPayload) -> ExecutionResult:
         """Run a subset of focused tests."""
+        spine = self._spine()
+        if spine is not None:
+            # Delegate to governed executor
+            argv = payload.parameters.get("argv")
+            if not argv:
+                return ExecutionResult(
+                    action=payload.action,
+                    success=False,
+                    error="RUN_FOCUSED_TESTS requires parameters.argv",
+                )
+            step = {"id": f"cgw:{payload.action.value}", "type": "run_cmd", "argv": argv}
+            r = spine.execute_step(step)
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(r.ok),
+                output=r.stdout,
+                error=r.stderr if not r.ok else None,
+                tests_ran=True,
+            )
+        
+        # Fallback to original logic
         focus_tests = payload.parameters.get("focus_tests", [])
         test_cmd = payload.parameters.get("test_cmd", self.config.default_test_cmd)
         
@@ -277,6 +344,20 @@ class BlockingExecutor:
                 error="No diff provided",
             )
         
+        spine = self._spine()
+        if spine is not None:
+            # Delegate to governed executor with patch hygiene
+            step = {"id": f"cgw:{payload.action.value}", "type": "apply_patch", "diff": diff}
+            r = spine.execute_step(step)
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(r.ok),
+                output=r.stdout,
+                error=r.stderr if not r.ok else None,
+                patch_applied=bool(r.ok),
+            )
+        
+        # Fallback to sandbox execution
         if self.sandbox is None:
             return ExecutionResult(
                 action=payload.action,
@@ -302,6 +383,20 @@ class BlockingExecutor:
     
     def _execute_revert_patch(self, payload: ActionPayload) -> ExecutionResult:
         """Revert the last applied patch."""
+        spine = self._spine()
+        if spine is not None:
+            # Delegate to governed executor
+            step = {"id": f"cgw:{payload.action.value}", "type": "reset_hard"}
+            r = spine.execute_step(step)
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(r.ok),
+                output=r.stdout,
+                error=r.stderr if not r.ok else None,
+                patch_applied=False,
+            )
+        
+        # Fallback to sandbox execution
         if self.sandbox is None:
             return ExecutionResult(
                 action=payload.action,
@@ -325,6 +420,18 @@ class BlockingExecutor:
     
     def _execute_validate(self, payload: ActionPayload) -> ExecutionResult:
         """Run validation checks."""
+        spine = self._spine()
+        if spine is not None:
+            # Validation == verifier command
+            vr = spine.verify()
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(vr.ok),
+                output=vr.stdout,
+                error=vr.stderr if not vr.ok else None,
+            )
+        
+        # Fallback
         return ExecutionResult(
             action=payload.action,
             success=True,
@@ -333,6 +440,20 @@ class BlockingExecutor:
     
     def _execute_lint(self, payload: ActionPayload) -> ExecutionResult:
         """Run linting."""
+        spine = self._spine()
+        if spine is not None:
+            # Delegate to governed executor
+            argv = payload.parameters.get("argv") or ["python", "-m", "ruff", "check", "."]
+            step = {"id": f"cgw:{payload.action.value}", "type": "run_cmd", "argv": argv}
+            r = spine.execute_step(step)
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(r.ok),
+                output=r.stdout,
+                error=r.stderr if not r.ok else None,
+            )
+        
+        # Fallback to sandbox execution
         if self.sandbox is None:
             return ExecutionResult(
                 action=payload.action,
@@ -357,6 +478,20 @@ class BlockingExecutor:
     
     def _execute_build(self, payload: ActionPayload) -> ExecutionResult:
         """Run build commands."""
+        spine = self._spine()
+        if spine is not None:
+            # Delegate to governed executor
+            argv = payload.parameters.get("argv") or ["python", "-m", "compileall", "."]
+            step = {"id": f"cgw:{payload.action.value}", "type": "run_cmd", "argv": argv}
+            r = spine.execute_step(step)
+            return ExecutionResult(
+                action=payload.action,
+                success=bool(r.ok),
+                output=r.stdout,
+                error=r.stderr if not r.ok else None,
+            )
+        
+        # Fallback to sandbox execution
         if self.sandbox is None:
             return ExecutionResult(
                 action=payload.action,
