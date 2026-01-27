@@ -136,7 +136,10 @@ class ControllerExecutionLoop:
 
         while replans <= self.max_replans:
             # 1) planner proposes a plan artifact (data)
-            plan = planner.plan(observation)
+            plan = planner.propose_plan(
+                goal=observation.get("goal", ""),
+                context=observation,
+            )
             self._current_plan = plan
             self.event_recorder("PLAN_PROPOSED", {"plan": plan})
 
