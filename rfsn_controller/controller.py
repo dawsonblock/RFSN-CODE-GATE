@@ -441,7 +441,7 @@ class ControllerConfig:
     # Performance optimizations
     enable_llm_cache: bool = False  # Enable LLM response caching
     llm_cache_path: Optional[str] = None  # Path to LLM cache database
-    parallel_patches: bool = False  # Generate patches in parallel
+    parallel_patches: bool = True  # Generate patches in parallel (faster)
     ensemble_mode: bool = False  # Use multi-model ensemble
     incremental_tests: bool = False  # Run only affected tests first
     enable_telemetry: bool = False  # Enable OpenTelemetry/Prometheus
@@ -1587,7 +1587,7 @@ def run_controller(cfg: ControllerConfig) -> Dict[str, Any]:
                 try:
                     import asyncio
 
-                    from .llm_async import generate_patches_parallel
+                    from .llm.async_client import generate_patches_parallel
                     print(f"[Step {step_count}] Generating parallel responses (temps={cfg.temps})...")
                     parallel_responses = asyncio.run(
                         generate_patches_parallel(

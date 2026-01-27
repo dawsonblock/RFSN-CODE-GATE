@@ -307,7 +307,7 @@ class LLMCache:
     """
     
     db_path: str
-    max_age_hours: int = 24
+    max_age_hours: int = 72  # Extended TTL for dev workflows
     max_entries: int = 10000
     
     _conn: Optional[sqlite3.Connection] = field(default=None, repr=False)

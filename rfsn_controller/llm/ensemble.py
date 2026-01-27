@@ -15,7 +15,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .async_client import (
     AsyncLLMResponse,
-    call_deepseek_async,
+    call_deepseek_cached,
+    call_gemini_cached,
 )
 
 # ============================================================================
@@ -225,39 +226,23 @@ async def call_model_by_provider(
     Currently supports DeepSeek, with stubs for other providers.
     """
     if model.provider == "deepseek":
-        return await call_deepseek_async(
+        return await call_deepseek_cached(
             prompt,
             temperature=temperature,
             model=model.name,
             system_prompt=system_prompt,
+            use_cache=True,  # Enable caching for speed
         )
     
     elif model.provider == "gemini":
-        # Gemini uses different API format
-        # For now, fall back to existing gemini module
-        try:
-            import asyncio
-
-            from .gemini import call_model as call_gemini_sync
-            
-            loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(
-                None,
-                lambda: call_gemini_sync(prompt, temperature)
-            )
-            
-            import json
-            return AsyncLLMResponse(
-                content=json.dumps(result),
-                model=model.name,
-                temperature=temperature,
-            )
-        except Exception as e:
-            return AsyncLLMResponse(
-                content=f'{{"mode": "error", "error": "{str(e)}"}}',
-                model=model.name,
-                temperature=temperature,
-            )
+        # Use async cached Gemini call
+        return await call_gemini_cached(
+            prompt,
+            temperature=temperature,
+            model=model.name,
+            system_prompt=system_prompt,
+            use_cache=True,  # Enable caching for speed
+        )
     
     else:
         # Stub for other providers

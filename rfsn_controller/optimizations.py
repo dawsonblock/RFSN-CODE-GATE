@@ -400,16 +400,19 @@ def decompress_if_needed(is_compressed: bool, data: bytes) -> str:
 
 @dataclass
 class TerminationHeuristics:
-    """Heuristics for early termination to save compute time."""
+    """Heuristics for early termination to save compute time.
+    
+    Tuned for fast feedback: stops quickly on repeated failures or stale patches.
+    """
     
     # Minimum steps before considering early termination
-    min_steps: int = 3
+    min_steps: int = 2  # Reduced from 3 for faster feedback
     
     # Maximum consecutive failures before terminating
-    max_consecutive_failures: int = 5
+    max_consecutive_failures: int = 3  # Reduced from 5
     
     # Maximum similar patches (by hash) before terminating
-    max_similar_patches: int = 3
+    max_similar_patches: int = 2  # Reduced from 3
     
     # Success rate threshold (if below this after min_steps, terminate)
     min_success_rate: float = 0.05
