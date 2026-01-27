@@ -711,6 +711,7 @@ def docker_run(
     pids: int = 256,
     read_only: bool = False,
     use_cache: bool = True,
+    use_warm_pool: bool = False,
 ) -> DockerResult:
     """Run a command inside a Docker container with the repo mounted.
 
@@ -725,6 +726,7 @@ def docker_run(
         pids: Process ID limit.
         read_only: Whether to mount repo as read-only with /tmp as tmpfs.
         use_cache: Whether to use cache volumes for faster dependency installs.
+        use_warm_pool: Use pre-warmed containers for faster execution (2-5s savings).
 
     Returns:
         DockerResult with execution status and output.
@@ -737,6 +739,26 @@ def docker_run(
         cmd_argv = list(cmd)
     if not cmd_argv:
         return DockerResult(ok=False, exit_code=2, stdout='', stderr='empty command', timed_out=False)
+
+    # Try warm pool first for faster execution
+    if use_warm_pool and not read_only:
+        try:
+            from .docker_pool import get_warm_pool
+            pool = get_warm_pool()
+            container = pool.get_or_create(docker_image, sb.repo_dir, cpu, mem_mb)
+            if container:
+                result = pool.exec_in_container(container, cmd_argv, timeout_sec)
+                pool.release(container)
+                return DockerResult(
+                    ok=result["ok"],
+                    exit_code=result["exit_code"],
+                    stdout=result["stdout"],
+                    stderr=result["stderr"],
+                    timed_out=False,
+                )
+        except Exception as e:
+            print(f"Warm pool failed, falling back to cold start: {e}")
+
 
     try:
         # Check the command against the security policy before running inside Docker.

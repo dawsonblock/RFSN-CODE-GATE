@@ -35,6 +35,39 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 DEFAULT_TIMEOUT = 120.0  # 2 minutes
 
+# Connection pool settings for HTTP reuse
+CONNECTION_POOL_LIMITS = {
+    "max_keepalive_connections": 20,
+    "max_connections": 100,
+    "keepalive_expiry": 30.0,  # seconds
+}
+
+# Global HTTP client pool (reuses connections)
+_http_clients: Dict[str, Any] = {}
+
+def get_http_client(base_url: str) -> Any:
+    """Get or create a pooled HTTP client for the given base URL.
+    
+    Reusing connections saves ~50-100ms per request by avoiding TLS handshakes.
+    """
+    if not HTTPX_AVAILABLE:
+        return None
+    
+    if base_url not in _http_clients:
+        limits = httpx.Limits(
+            max_keepalive_connections=CONNECTION_POOL_LIMITS["max_keepalive_connections"],
+            max_connections=CONNECTION_POOL_LIMITS["max_connections"],
+            keepalive_expiry=CONNECTION_POOL_LIMITS["keepalive_expiry"],
+        )
+        _http_clients[base_url] = httpx.AsyncClient(
+            base_url=base_url,
+            limits=limits,
+            timeout=DEFAULT_TIMEOUT,
+            http2=True,  # Enable HTTP/2 for multiplexing
+        )
+    return _http_clients[base_url]
+
+
 
 # ============================================================================
 # ASYNC LLM CLIENTS

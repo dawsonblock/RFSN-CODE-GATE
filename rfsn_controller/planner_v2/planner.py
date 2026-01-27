@@ -580,14 +580,20 @@ class PlannerV2:
                 failure_type
             )
             
-        if not success and diff and self._firewall:
-            self._firewall.record_toxicity(
-                files or [],
-                diff,
-                failure_type
+        # Record to ActionOutcomeStore for learning
+        try:
+            from ..action_store import get_action_store
+            store = get_action_store()
+            store.record_from_controller(
+                action_type="patch",
+                context={"language": "python", "tags": tags or []},  # Minimal context
+                input_summary=diff[:200] if diff else "",
+                success=success,
+                details={"files": files, "failure_type": failure_type},
+                error_type=failure_type if not success else None,
             )
-            
-        # Future: Write to ActionOutcomeStore loop here if we wanted to enforce Upgrade 3 fully
+        except ImportError:
+            pass  # ActionStore not available
 
     def check_guardrails(self, file_path: str, diff: str) -> List[str]:
         """Check if patch violates guardrails.
