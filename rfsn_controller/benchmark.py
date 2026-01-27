@@ -69,13 +69,13 @@ def benchmark_llm_cache() -> BenchmarkResult:
     
     cache = LLMCache(db_path="/tmp/bench_cache.db")
     
-    # Prime with some entries
+    # Prime with some entries (use set, not put)
     for i in range(10):
-        cache.put(
+        cache.set(
             f"test_prompt_{i}",
+            "test",
+            0.0,
             f"test_response_{i}",
-            model="test",
-            temperature=0.0,
         )
     
     # Benchmark cache hits
@@ -108,8 +108,8 @@ def benchmark_parallel_patch_gen() -> BenchmarkResult:
 
 def benchmark_file_cache() -> BenchmarkResult:
     """Benchmark SmartFileCache performance."""
-    import tempfile
     import os
+    import tempfile
     
     result = BenchmarkResult(name="SmartFileCache Read", iterations=100)
     
@@ -124,11 +124,9 @@ def benchmark_file_cache() -> BenchmarkResult:
             temp_path = f.name
         
         try:
-            # First read (cache miss)
-            start = time.perf_counter()
+            # First read (cache miss) - prime the cache
             cache.get(temp_path) or open(temp_path).read()
             cache.put(temp_path, open(temp_path).read())
-            miss_ms = (time.perf_counter() - start) * 1000
             
             # Subsequent reads (cache hits)
             for _ in range(100):
@@ -150,22 +148,28 @@ def benchmark_plan_cache() -> BenchmarkResult:
     
     try:
         from .planner_v2.plan_cache import PlanCache
+        from .planner_v2.schema import Plan, Step
         
-        cache = PlanCache()
+        cache = PlanCache()  # Uses defaults (cache_dir=None)
         
         # Prime with a cached plan
         goal = "Fix the failing test in test_example.py"
         context = {"test_cmd": "pytest", "language": "python"}
         
         # Create a mock plan for caching
-        from .planner_v2.schema import Plan, Step
         mock_plan = Plan(
             plan_id="test-plan",
             goal=goal,
-            steps=[Step(step_id="s1", title="Test", intent="Test")],
+            steps=[Step(
+                step_id="s1",
+                title="Test",
+                intent="Test",
+                allowed_files=["test_example.py"],
+                success_criteria="Tests pass",
+            )],
             created_at="2024-01-01T00:00:00Z",
         )
-        cache.put(goal, context, mock_plan)
+        cache.put(goal, context, mock_plan, final_status="success")
         
         # Benchmark lookups
         for _ in range(50):
@@ -173,7 +177,7 @@ def benchmark_plan_cache() -> BenchmarkResult:
             cache.get(goal, context)
             elapsed_ms = (time.perf_counter() - start) * 1000
             result.times_ms.append(elapsed_ms)
-    except ImportError as e:
+    except Exception as e:
         print(f"PlanCache benchmark skipped: {e}")
         result.times_ms.append(0.0)
     
@@ -223,7 +227,7 @@ def print_summary(results: List[BenchmarkResult]) -> None:
 def main():
     parser = argparse.ArgumentParser(description="RFSN Controller Benchmark")
     parser.add_argument("--iterations", type=int, default=100, help="Iterations per benchmark")
-    args = parser.parse_args()
+    _args = parser.parse_args()  # noqa: F841
     
     results = run_benchmarks()
     print_summary(results)
