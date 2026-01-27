@@ -145,10 +145,18 @@ class ControllerExecutionLoop:
 
             # 2) hard validate plan
             try:
-                steps = self.gate.validate_plan(plan)
+                self.gate.validate_plan(plan)
             except PlanGateError as e:
                 return self._fail(start_time, outcomes, f"PlanGateError: {e}")
 
+            # Derive steps from validated plan structure
+            steps = plan.get("steps") if isinstance(plan, dict) else None
+            if not isinstance(steps, list):
+                return self._fail(
+                    start_time,
+                    outcomes,
+                    "Validated plan does not contain a 'steps' list.",
+                )
             # 3) execute serially
             step_outcomes, ok = self._execute_steps_serial(steps)
             outcomes.extend(step_outcomes)
