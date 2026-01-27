@@ -3,8 +3,6 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from rfsn_controller.executor_spine import GovernedExecutor, StepExecResult
 
 
