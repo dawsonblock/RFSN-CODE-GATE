@@ -190,10 +190,10 @@ class BlockingExecutor:
                 # fallback to CWD if not configured
                 work_dir = Path(".").resolve()
             self._governed_exec = GovernedExecutor(
-                repo_dir=str(work_dir),
-                allowed_commands=None,  # let global allowlist enforce; set per-profile if you have it
-                verify_argv=["pytest", "-q"],  # override via config if desired
-                timeout_sec=self.config.timeout_sec,
+                        repo_dir=str(work_dir),
+                        allowed_commands=None,
+                        verify_argv=self.config.default_test_cmd.split(),
+                        timeout_sec=self.config.timeout_sec,
             )
         return self._governed_exec
     
