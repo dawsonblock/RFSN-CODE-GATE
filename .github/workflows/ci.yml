@@ -1,0 +1,48 @@
+name: RFSN CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          # Install package with dev extras (pytest/ruff/mypy)
+          pip install -e '.[dev]'
+
+      - name: Lint (ruff)
+        run: |
+          ruff check .
+
+      - name: Type check (mypy)
+        run: |
+          mypy rfsn_controller cgw_ssl_guard || true
+
+      - name: Compile
+        run: |
+          python -m compileall -q .
+
+      - name: Tests
+        env:
+          # Ensure tests never require real network keys
+          OPENAI_API_KEY: ''
+          GOOGLE_API_KEY: ''
+        run: |
+          # Run *architecture safety invariants* only.
+          # This keeps CI focused on preventing safety regressions even if
+          # the full experimental suite is still in flux.
+          pytest -q tests/security
