@@ -21,7 +21,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 from .exec_utils import safe_run, ExecResult
 from .patch_hygiene import validate_patch_hygiene
