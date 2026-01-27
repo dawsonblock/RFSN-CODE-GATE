@@ -206,7 +206,7 @@ class GovernedExecutor:
         for p in root.rglob("*"):
             if len(hits) >= max_matches:
                 break
-            if not p.is_file():
+            if p.is_symlink() or not p.is_file():
                 continue
             # skip huge/binary-ish files
             try:
