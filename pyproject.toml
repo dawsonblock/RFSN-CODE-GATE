@@ -52,6 +52,9 @@ addopts = "-v --strict-markers"
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests requiring network",
+    "unit: marks tests as unit tests",
+    "security: marks tests as security-related tests",
+    "scanner: marks tests for shell scanner",
 ]
 filterwarnings = [
     "ignore:Using `@model_validator` with mode='after'.*:DeprecationWarning:google\\.genai\\.types",
