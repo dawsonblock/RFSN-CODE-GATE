@@ -6,12 +6,11 @@ Pre-runs likely next steps to reduce perceived latency.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 
 @dataclass
