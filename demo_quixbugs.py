@@ -192,14 +192,16 @@ Respond with ONLY the fixed single line of code, nothing else."""
             response = await call_deepseek_async(
                 prompt,
                 model="deepseek-chat",
-                max_tokens=100,
+                temperature=0.0,
             )
-            print(f"   🤖 LLM suggestion: {response.strip()}")
+            # response is AsyncLLMResponse with .content attribute
+            content = response.content if hasattr(response, 'content') else str(response)
+            print(f"   🤖 LLM suggestion: {content.strip()[:200]}")
             
             # Check against correct fix
             correct_code = correct_file.read_text() if correct_file.exists() else ""
-            if any(line.strip() in response for line in correct_code.split("\n") if line.strip()):
-                print(f"   ✅ Matches correct fix!")
+            if any(line.strip() in content for line in correct_code.split("\n") if line.strip()):
+                print("   ✅ Matches correct fix!")
             
         except Exception as e:
             print(f"   ⚠️  LLM call failed: {e}")
