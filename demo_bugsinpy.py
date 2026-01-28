@@ -196,10 +196,14 @@ Provide ONLY the corrected Python code lines. No explanations, no tool requests,
                     else:
                         print(f"      {line[:70]}")
                 
-                # Check for key fix pattern
+                # Check for key fix pattern - both ground truth and alternative valid fixes
                 actual_fix = extract_fix(patch)
+                # Ground truth uses [^"]+, but many alternatives also work
                 if '[^"]+' in diff_content or "([^" in diff_content:
-                    print("   ✅ LLM correctly identified the regex fix!")
+                    print("   ✅ LLM matches ground truth regex fix!")
+                elif any(p in diff_content for p in [r'[a-z\-]+', r'[a-z\\-]+', 
+                         r'[a-zA-Z0-9_-]+', r'[a-zA-Z-]+', r'[\w-]+']):
+                    print("   ✅ LLM found valid alternative fix (expanded character class)!")
                 elif any(fix_line.lstrip("+").strip() in diff_content 
                        for fix_line in actual_fix.split("\n") 
                        if fix_line.startswith("+")):
