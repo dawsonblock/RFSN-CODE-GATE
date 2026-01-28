@@ -155,19 +155,22 @@ async def try_llm_fix(bug: dict):
     patch = load_patch(bug["project"], bug["bug_id"])
     buggy_code = extract_buggy_code(patch)
     
-    prompt = f"""You are debugging a Python bug in the {bug['project']} project.
+    prompt = f"""You are a Python expert fixing a bug. DO NOT request tools. Just provide the fix directly.
 
-Bug description: {bug['description']}
+Project: {bug['project']}
+Bug: {bug['description']}
 File: {bug['bug_file']}
 
-Here's the buggy code context:
+Buggy code:
 ```python
 {buggy_code}
 ```
 
-Analyze the bug and suggest a fix. Return ONLY the corrected code, no explanation."""
+The regex pattern `[a-z]+` is too restrictive - it doesn't match commands with hyphens or other characters.
 
-    print(f"\n   🤖 Asking LLM for fix...")
+Provide ONLY the corrected Python code lines. No explanations, no tool requests, just the fixed code."""
+
+    print("\n   🤖 Asking LLM for fix...")
     
     try:
         response = await call_deepseek_async(
@@ -177,21 +180,39 @@ Analyze the bug and suggest a fix. Return ONLY the corrected code, no explanatio
         )
         content = response.content if hasattr(response, 'content') else str(response)
         
-        # Check if fix matches
-        actual_fix = extract_fix(patch)
-        
-        print(f"   📤 LLM Response:")
-        # Show first few lines of response
-        for line in content.strip().split("\n")[:5]:
-            print(f"      {line[:70]}")
-        
-        # Simple check - does response contain key fix patterns?
-        if any(fix_line.lstrip("+").strip() in content 
-               for fix_line in actual_fix.split("\n") 
-               if fix_line.startswith("+")):
-            print("   ✅ LLM identified key parts of the fix!")
-        else:
-            print("   ⚠️  LLM fix may differ from ground truth")
+        # Try to parse JSON response (RFSN controller format)
+        import json
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict) and "diff" in data:
+                # Extract diff from patch response
+                diff_content = data["diff"]
+                print("   📤 LLM Patch Response:")
+                for line in diff_content.split("\\n")[:8]:
+                    if line.startswith("-"):
+                        print(f"      \033[91m{line}\033[0m")
+                    elif line.startswith("+"):
+                        print(f"      \033[92m{line}\033[0m")
+                    else:
+                        print(f"      {line[:70]}")
+                
+                # Check for key fix pattern
+                actual_fix = extract_fix(patch)
+                if '[^"]+' in diff_content or "([^" in diff_content:
+                    print("   ✅ LLM correctly identified the regex fix!")
+                elif any(fix_line.lstrip("+").strip() in diff_content 
+                       for fix_line in actual_fix.split("\n") 
+                       if fix_line.startswith("+")):
+                    print("   ✅ LLM identified key parts of the fix!")
+                else:
+                    print("   ⚠️  LLM fix may differ from ground truth")
+            else:
+                print(f"   📤 LLM Response: {content[:200]}")
+        except json.JSONDecodeError:
+            # Plain text response
+            print(f"   📤 LLM Response:")
+            for line in content.strip().split("\n")[:5]:
+                print(f"      {line[:70]}")
             
     except Exception as e:
         print(f"   ❌ LLM error: {e}")
