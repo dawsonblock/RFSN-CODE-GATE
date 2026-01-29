@@ -4,7 +4,7 @@
 
 **Autonomous Code Repair Agent with Hierarchical Planning & Serial Decision Architecture**
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-102%20passing-brightgreen.svg)](#testing)
 [![CGW Architecture](https://img.shields.io/badge/CGW-Serial%20Decisions-purple.svg)](#cgw-mode)
@@ -75,6 +75,31 @@ Active-active LLM failover.
 
 ---
 
+## 🚀 Quick Start
+
+```bash
+# Install
+pip install -e .
+
+# Set API keys
+export DEEPSEEK_API_KEY="sk-..."
+export GEMINI_API_KEY="..."
+
+# Run with Docker (recommended)
+python -m rfsn_controller.cli --repo https://github.com/user/repo --test "pytest"
+
+# Run without Docker (local execution)
+python -m rfsn_controller.cli --repo ./my-repo --test "pytest" --unsafe-host-exec
+
+# Run with CGW serial decision mode
+python -m rfsn_controller.cli --repo https://github.com/user/repo --cgw-mode
+
+# Run with hierarchical planner
+python -m rfsn_controller.cli --repo https://github.com/user/repo --planner-mode v4
+```
+
+---
+
 ## 🏗️ Architecture
 
 ```
@@ -112,8 +137,6 @@ Active-active LLM failover.
 ---
 
 ## ⚡ Speed Optimizations
-
-The controller includes advanced optimizations for maximum performance:
 
 <table>
 <tr>
@@ -166,8 +189,6 @@ Run only tests affected by changes.
 </tr>
 </table>
 
-### All Optimizations
-
 | Module | Impact | Description |
 |--------|--------|-------------|
 | `docker_pool` | 2-5s/run | Warm container reuse |
@@ -178,29 +199,31 @@ Run only tests affected by changes.
 | `speculative_exec` | Preload | Predict and pre-compute next steps |
 | `incremental_testing` | 50-90% faster | Affected test selection |
 
-```bash
-# Run performance benchmarks
-python -m rfsn_controller.benchmark
-```
-
 ---
 
-## 🚀 Quick Start
+## 🐳 Docker vs Local Execution
+
+### Docker Mode (Default)
 
 ```bash
-# Install
-pip install -e .
-
-# Set API keys
-export DEEPSEEK_API_KEY="sk-..."
-export GEMINI_API_KEY="..."
-
-# Run (CGW serial decision mode)
-python -m rfsn_controller.cli --repo https://github.com/user/repo --cgw-mode
-
-# Run with hierarchical planner
-python -m rfsn_controller.cli --repo https://github.com/user/repo --planner-mode v4
+# Full isolation, recommended for untrusted repositories
+python -m rfsn_controller.cli --repo https://github.com/user/repo --test "pytest"
 ```
+
+### Local Mode (`--unsafe-host-exec`)
+
+```bash
+# Direct execution on host, no Docker required
+# Only use with trusted local repositories
+python -m rfsn_controller.cli --repo ./my-trusted-repo --test "pytest" --unsafe-host-exec
+```
+
+**When to use `--unsafe-host-exec`:**
+
+- Docker daemon not running
+- Local development/testing
+- Trusted repositories only
+- Faster patch verification
 
 ---
 
@@ -235,9 +258,6 @@ plan = {
 
 result = loop.run_plan(plan)
 print(f"Success: {result.success}, Steps: {result.steps_succeeded}/{result.steps_executed}")
-
-# Update learning (anti-regression)
-selector.update(rec, success=result.success)
 ```
 
 ### Allowed Step Types
@@ -282,39 +302,26 @@ print(result.summary())
 ```
 ├── cgw_ssl_guard/           # CGW/SSL Guard Core
 │   ├── coding_agent/        # Serial Decision Coding Agent
-│   │   ├── action_types.py
-│   │   ├── proposal_generators.py
-│   │   ├── executor.py
-│   │   ├── coding_agent_runtime.py
-│   │   ├── config.py            # YAML/JSON configuration
-│   │   ├── cli.py               # CLI entry point
-│   │   └── integrated_runtime.py
 │   ├── thalamic_gate.py
 │   ├── event_bus.py
 │   └── monitors.py
 │
 ├── rfsn_controller/         # Main Controller
 │   ├── controller.py        # 2600+ line repair loop
-│   ├── controller_loop.py   # NEW: Serial execution with planner
-│   ├── gates/               # NEW: Safety gates
-│   │   ├── __init__.py
-│   │   └── plan_gate.py     # Hard safety enforcement
-│   ├── learning/            # NEW: Proposal-space learning
-│   │   ├── fingerprint.py   # Failure categorization
-│   │   ├── strategy_bandit.py
-│   │   ├── quarantine.py
-│   │   └── learned_strategy_selector.py
-│   ├── planner_v2/          # Planner system
-│   ├── qa/                   # QA/verification
-│   ├── buildpacks/          # Language support
-│   └── cgw_bridge.py        # CGW integration
+│   ├── controller_loop.py   # Serial execution with planner
+│   ├── parallel.py          # Parallel patch evaluation
+│   ├── evidence_pack.py     # Evidence collection & export
+│   ├── setup_report.py      # Setup status reporting
+│   ├── gates/               # Safety gates
+│   ├── learning/            # Proposal-space learning
+│   ├── qa/                  # QA/verification
+│   ├── llm/                 # LLM integration & ensemble
+│   └── buildpacks/          # Language support
 │
 ├── tests/                   # Test Suite (102 tests)
 │   ├── cgw/                 # CGW tests (18)
 │   ├── test_phase2.py       # Phase 2 tests (37)
-│   ├── rfsn_controller/
-│   │   └── test_phase4.py   # Phase 4 tests (25)
-│   └── ...
+│   └── rfsn_controller/     # Controller tests
 │
 └── docs/                    # Documentation
 ```
@@ -357,17 +364,6 @@ print('✓ Phase 4 imports successful')
 
 ---
 
-## 📚 Documentation
-
-| Document | Description |
-|----------|-------------|
-| [CGW_CODING_AGENT.md](docs/CGW_CODING_AGENT.md) | CGW architecture guide |
-| [USAGE_GUIDE.md](docs/USAGE_GUIDE.md) | Full usage guide |
-| [FEATURE_MODE.md](docs/FEATURE_MODE.md) | Feature engineering mode |
-| [DOCKER_SANDBOX.md](docs/DOCKER_SANDBOX.md) | Docker sandbox setup |
-
----
-
 ## ⚙️ Configuration
 
 ```bash
@@ -387,17 +383,19 @@ print('✓ Phase 4 imports successful')
 --policy-mode bandit
 --quarantine-threshold 0.3
 
-# Parallel patches
---parallel-patches
---ensemble-mode
+# Execution
+--unsafe-host-exec       # Run locally (no Docker)
+--steps 20               # Max repair steps
+--parallel-patches       # Parallel patch evaluation
+--ensemble-mode          # Multi-model ensemble
 ```
 
 ---
 
 ## 🔒 Security
 
-- All code runs in isolated Docker containers
-- No host execution by default
+- All code runs in isolated Docker containers (default)
+- Optional `--unsafe-host-exec` for trusted local repos
 - **PlanGate** validates every step before execution
 - **Shell injection detection** blocks dangerous commands
 - APT package whitelisting
