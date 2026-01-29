@@ -54,3 +54,7 @@ artifacts/
 .mypy_cache/
 .coverage
 htmlcov/
+
+# LLM caches
+*.db
+llm_cache.db
