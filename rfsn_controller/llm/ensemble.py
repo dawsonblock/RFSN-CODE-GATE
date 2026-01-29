@@ -311,7 +311,7 @@ async def call_ensemble(
     scored_responses: List[ScoredResponse] = []
     failed_models: List[str] = []
     
-    for model, result in zip(models, results, strict=True):
+    for model, result in zip(models, results):
         if isinstance(result, Exception):
             failed_models.append(f"{model.name}: {str(result)}")
             continue

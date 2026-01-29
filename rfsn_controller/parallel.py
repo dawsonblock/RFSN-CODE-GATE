@@ -11,7 +11,7 @@ import concurrent.futures
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
-from .sandbox import Sandbox, apply_patch_in_dir, docker_run, drop_worktree, make_worktree
+from .sandbox import DockerResult, Sandbox, apply_patch_in_dir, docker_run, drop_worktree, make_worktree, run_cmd
 
 
 @dataclass
@@ -45,6 +45,7 @@ def _evaluate_single_patch(
     cpu: float,
     mem_mb: int,
     durability_reruns: int = 0,
+    unsafe_host_exec: bool = False,
 ) -> PatchResult:
     """Evaluate a single patch in an isolated worktree.
 
@@ -55,6 +56,7 @@ def _evaluate_single_patch(
         focus_cmd: Focused test command for quick feedback.
         full_cmd: Full test command for verification.
         temperature: Temperature used to generate this patch.
+        unsafe_host_exec: If True, run commands locally instead of in Docker.
 
     Returns:
         A PatchResult with evaluation outcome.
@@ -79,15 +81,29 @@ def _evaluate_single_patch(
             _track_patch_result(diff, result, time.time() - start_time)
             return result
         
-        # Use docker_run instead of run_cmd to ensure correct environment
-        r1 = docker_run(
-            Sandbox(sb.root, wt), 
-            focus_cmd, 
-            timeout_sec=90,
-            docker_image=docker_image,
-            cpu=cpu,
-            mem_mb=mem_mb
-        )
+        # Helper function to run command either locally or in Docker
+        def execute_cmd(cmd: str, timeout: int) -> DockerResult:
+            if unsafe_host_exec:
+                # Run locally using run_cmd
+                result = run_cmd(Sandbox(sb.root, wt), cmd, timeout_sec=timeout)
+                return DockerResult(
+                    ok=result.get('ok', False),
+                    exit_code=result.get('exit_code', 1),
+                    stdout=result.get('stdout', ''),
+                    stderr=result.get('stderr', ''),
+                    timed_out=False,
+                )
+            else:
+                return docker_run(
+                    Sandbox(sb.root, wt), 
+                    cmd, 
+                    timeout_sec=timeout,
+                    docker_image=docker_image,
+                    cpu=cpu,
+                    mem_mb=mem_mb
+                )
+        
+        r1 = execute_cmd(focus_cmd, 90)
         if not r1.ok:
             result = PatchResult(
                 diff=diff,
@@ -99,25 +115,11 @@ def _evaluate_single_patch(
             _track_patch_result(diff, result, time.time() - start_time)
             return result
         
-        r2 = docker_run(
-            Sandbox(sb.root, wt),
-            full_cmd,
-            timeout_sec=180,
-            docker_image=docker_image,
-            cpu=cpu,
-            mem_mb=mem_mb,
-        )
+        r2 = execute_cmd(full_cmd, 180)
         if r2.ok:
             # Durability reruns: run full suite additional times to detect flakiness
             for k in range(int(durability_reruns or 0)):
-                rN = docker_run(
-                    Sandbox(sb.root, wt),
-                    full_cmd,
-                    timeout_sec=180,
-                    docker_image=docker_image,
-                    cpu=cpu,
-                    mem_mb=mem_mb,
-                )
+                rN = execute_cmd(full_cmd, 180)
                 if not rN.ok:
                     result = PatchResult(
                         diff=diff,
@@ -188,6 +190,7 @@ def evaluate_patches_parallel(
     mem_mb: int,
     durability_reruns: int = 0,
     max_workers: int = 3,
+    unsafe_host_exec: bool = False,
 ) -> List[PatchResult]:
     """Evaluate multiple patches in parallel using thread pool.
 
@@ -197,6 +200,7 @@ def evaluate_patches_parallel(
         focus_cmd: Focused test command for quick feedback.
         full_cmd: Full test command for verification.
         max_workers: Maximum number of parallel evaluations.
+        unsafe_host_exec: If True, run commands locally instead of in Docker.
 
     Returns:
         List of PatchResult objects in the same order as input patches.
@@ -227,6 +231,7 @@ def evaluate_patches_parallel(
                 cpu,
                 mem_mb,
                 durability_reruns,
+                unsafe_host_exec,
             )
             future_to_index[future] = idx
 

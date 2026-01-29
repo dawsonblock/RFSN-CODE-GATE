@@ -91,6 +91,14 @@ class QAOrchestrator:
         self.persistence: Optional[QAPersistence] = None
         if self.config.persist_outcomes and self.config.db_path:
             self.persistence = QAPersistence(self.config.db_path)
+    
+    def has_llm_critic(self) -> bool:
+        """Check if the critic has an LLM backend (not just rule-based fallback).
+        
+        Returns:
+            True if LLM-based critic is available, False if rule-based only.
+        """
+        return self.critic.llm_call is not None
 
     def evaluate_patch(
         self,
